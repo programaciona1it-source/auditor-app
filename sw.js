@@ -1,4 +1,4 @@
-const CACHE_NAME = "auditor-shell-v1";
+const CACHE_NAME = "auditor-shell-v2";
 const SHELL_FILES = ["./index.html", "./manifest.json"];
 
 self.addEventListener("install", (event) => {
@@ -16,5 +16,14 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.pathname.startsWith("/aforo/") || url.pathname.startsWith("/fotos/")) return;
-  event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
+
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
+  );
 });

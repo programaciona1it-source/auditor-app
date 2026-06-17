@@ -294,11 +294,17 @@ function actualizarUIModo() {
   }
 }
 
-function cambiarModoEscaneo(modo) {
-  if (modo === modoEscaneo) return;
+let cambiandoModo = false;
+
+async function cambiarModoEscaneo(modo) {
+  if (modo === modoEscaneo || cambiandoModo) return;
+  cambiandoModo = true;
   modoEscaneo = modo;
   actualizarUIModo();
-  iniciarScanner();
+  setStatus("scan", "Cambiando cámara…", "Un momento");
+  await iniciarScanner();
+  actualizarUIModo();
+  cambiandoModo = false;
 }
 
 /* ═══════════════════════════════════════════════
@@ -306,6 +312,7 @@ function cambiarModoEscaneo(modo) {
    ═══════════════════════════════════════════════ */
 async function iniciarScanner() {
   await detenerScanner();
+  await new Promise(resolve => setTimeout(resolve, 250)); // respiro para liberar la cámara anterior
   h5scanner = new Html5Qrcode("reader");
   const camW = document.getElementById("cam-section").clientWidth || 360;
   const camH = document.getElementById("cam-section").clientHeight || 280;
@@ -352,7 +359,16 @@ async function iniciarScanner() {
 }
 
 async function detenerScanner() {
-  if (h5scanner) { try { await h5scanner.stop(); } catch {} h5scanner = null; }
+  if (h5scanner) {
+    try {
+      const estado = h5scanner.getState ? h5scanner.getState() : null;
+      if (estado === undefined || estado === 2) {
+        await h5scanner.stop();
+      }
+    } catch {}
+    try { h5scanner.clear(); } catch {}
+    h5scanner = null;
+  }
   const r = document.getElementById("reader");
   if (r) r.innerHTML = "";
 }

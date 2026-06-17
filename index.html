@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#080c10">
+  <title>Auditor · Aforo</title>
+
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Auditor">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;900&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    :root {
+      --bg: #080c10; --bg2: #0e1318; --bg3: #141b22;
+      --border: #1e2d3d; --border2: #2a3d52;
+      --accent: #ffaa00; --accent-d: #cc8800;
+      --ok: #00e676; --ok-d: #00b058;
+      --err: #ff4455; --warn: #ffaa00;
+      --text: #e8f0f8; --text2: #8fa8c0; --text3: #4a6278;
+      --mono: 'JetBrains Mono', monospace; --sans: 'Inter', -apple-system, sans-serif;
+      --cat-a: #00d4ff; --cat-b: #a78bfa; --cat-c: #fbbf24; --cat-d: #34d399; --cat-e: #fb7185;
+    }
+
+    html, body { height: 100%; overflow: hidden; }
+    body { background: var(--bg); color: var(--text); font-family: var(--sans); display: flex; flex-direction: column; height: 100dvh; }
+
+    header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-icon { width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent) 0%, #cc6600 100%); border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; box-shadow: 0 0 16px rgba(255,170,0,0.3); }
+    .brand-text { font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+    .brand-sub { font-size: 9px; color: var(--text3); font-family: var(--mono); letter-spacing: 0.5px; }
+
+    .screen { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+    .screen.active { display: flex; }
+
+    /* ── PANTALLA ESCANEO ── */
+    .camera-section { position: relative; background: #000; flex-shrink: 0; overflow: hidden; height: 280px; }
+    #reader { width: 100%; height: 100%; }
+    #reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; display: block; }
+    #reader canvas, #reader img { display: none !important; }
+    #reader > div { border: none !important; }
+
+    .cam-overlay { position: absolute; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; }
+    .cam-overlay::before { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+    .scan-frame { position: relative; z-index: 2; width: 90%; height: 130px; }
+    .scan-frame .c { position: absolute; width: 22px; height: 22px; }
+    .scan-frame .c::before, .scan-frame .c::after { content: ''; position: absolute; background: var(--accent); }
+    .scan-frame .c-tl { top: 0; left: 0; } .scan-frame .c-tl::before { top:0; left:0; width:100%; height:3px; border-radius:3px 0 0 0; } .scan-frame .c-tl::after { top:0; left:0; width:3px; height:100%; border-radius:3px 0 0 0; }
+    .scan-frame .c-tr { top: 0; right: 0; } .scan-frame .c-tr::before { top:0; right:0; width:100%; height:3px; border-radius:0 3px 0 0; } .scan-frame .c-tr::after { top:0; right:0; width:3px; height:100%; border-radius:0 3px 0 0; }
+    .scan-frame .c-bl { bottom: 0; left: 0; } .scan-frame .c-bl::before { bottom:0; left:0; width:100%; height:3px; border-radius:0 0 0 3px; } .scan-frame .c-bl::after { bottom:0; left:0; width:3px; height:100%; border-radius:0 0 0 3px; }
+    .scan-frame .c-br { bottom: 0; right: 0; } .scan-frame .c-br::before { bottom:0; right:0; width:100%; height:3px; border-radius:0 0 3px 0; } .scan-frame .c-br::after { bottom:0; right:0; width:3px; height:100%; border-radius:0 0 3px 0; }
+    .scan-beam { position: absolute; left: 3px; right: 3px; height: 2px; background: linear-gradient(90deg, transparent 0%, var(--accent) 30%, #fff 50%, var(--accent) 70%, transparent 100%); border-radius: 2px; animation: beamMove 2s ease-in-out infinite; box-shadow: 0 0 8px var(--accent); }
+    @keyframes beamMove { 0% { top: 10%; opacity: 0.6; } 50% { top: 85%; opacity: 1; } 100% { top: 10%; opacity: 0.6; } }
+
+    .status-bar { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 9px 14px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-height: 50px; }
+    .status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: dotPulse 1.2s ease-in-out infinite; }
+    .status-dot.busy { animation: spin 1s linear infinite; border-radius: 0; }
+    @keyframes dotPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .status-content { flex: 1; min-width: 0; }
+    .status-main { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .status-hint { font-size: 10px; color: var(--text2); margin-top: 2px; font-family: var(--mono); }
+
+    .actions { display: flex; gap: 8px; padding: 8px 12px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .btn-act { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 6px; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.5px; color: var(--text2); cursor: pointer; text-transform: uppercase; }
+    .btn-act:active { transform: scale(0.94); }
+
+    /* ── RESULTADO: APARECE / NO APARECE ── */
+    #resultado-wrap { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+    .resultado-card { border-radius: 18px; padding: 22px 18px; text-align: center; }
+    .resultado-card.si { background: rgba(0,230,118,0.08); border: 2px solid var(--ok); }
+    .resultado-card.no { background: rgba(255,68,85,0.08); border: 2px solid var(--err); }
+    .resultado-icono { font-size: 48px; margin-bottom: 8px; }
+    .resultado-titulo { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+    .resultado-titulo.si { color: var(--ok); } .resultado-titulo.no { color: var(--err); }
+    .resultado-sub { font-size: 11px; color: var(--text2); font-family: var(--mono); }
+
+    .datos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+    .dato-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: left; }
+    .dato-label { font-size: 9px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.5px; }
+    .dato-valor { font-size: 13px; font-weight: 700; font-family: var(--mono); margin-top: 3px; }
+
+    .fotos-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+    .foto-preview-box { aspect-ratio: 1; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); position: relative; background: var(--bg2); }
+    .foto-preview-box img { width: 100%; height: 100%; object-fit: cover; }
+    .foto-preview-label { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.6); padding: 4px; font-size: 9px; font-family: var(--mono); text-align: center; }
+
+    .btn-primary { width: 100%; padding: 16px; background: var(--accent); color: #000; border: none; border-radius: 14px; font-family: var(--sans); font-size: 14px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; }
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-secondary { width: 100%; padding: 13px; background: var(--bg3); color: var(--text2); border: 1px solid var(--border); border-radius: 12px; font-family: var(--sans); font-size: 12px; font-weight: 700; cursor: pointer; }
+
+    /* ── PANTALLA AFORAR (cuando no existe) ── */
+    .cat-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; padding: 16px 16px 0; }
+    .cat-sub { font-size: 11px; color: var(--text2); font-family: var(--mono); margin-bottom: 14px; padding: 0 16px; }
+    .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px 16px; overflow-y: auto; }
+    .cat-btn { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 22px 10px; background: var(--bg2); border: 2px solid var(--border); border-radius: 16px; cursor: pointer; overflow: hidden; }
+    .cat-btn:active { transform: scale(0.96); }
+    .cat-btn::before { content:''; position:absolute; inset:0; opacity:0.08; background: var(--cat-color); }
+    .cat-letra { font-family: var(--mono); font-size: 30px; font-weight: 700; color: var(--cat-color); z-index: 1; }
+    .cat-peso { font-size: 11px; color: var(--text2); font-family: var(--mono); z-index: 1; }
+    .cat-btn.full { grid-column: span 2; }
+
+    .foto-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; border: 2px dashed var(--border2); border-radius: 16px; background: var(--bg2); cursor: pointer; overflow: hidden; position: relative; margin: 0 16px 14px; min-height: 140px; }
+    .foto-box.lleno { border-style: solid; border-color: var(--ok); }
+    .foto-box img { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
+    .foto-icon { font-size: 36px; opacity: 0.4; z-index: 1; }
+    .foto-label { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--text2); z-index: 1; text-transform: uppercase; }
+    .foto-check { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%; background: var(--ok); display: flex; align-items: center; justify-content: center; font-size: 14px; color: #000; z-index: 2; }
+
+    .toast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%) translateY(-80px); background: var(--bg2); border: 1px solid var(--border2); border-radius: 30px; padding: 9px 18px; font-size: 12px; font-weight: 600; font-family: var(--mono); z-index: 200; transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s; white-space: nowrap; pointer-events: none; opacity: 0; display: flex; align-items: center; gap: 8px; }
+    .toast.visible { transform: translateX(-50%) translateY(0); opacity: 1; }
+    .toast.ok { border-color: var(--ok); color: var(--ok); } .toast.err { border-color: var(--err); color: var(--err); } .toast.warn { border-color: var(--warn); color: var(--warn); }
+    .screen-flash { position: fixed; inset: 0; background: rgba(255,170,0,0.12); pointer-events: none; z-index: 50; opacity: 0; transition: opacity 0.08s; }
+    .screen-flash.active { opacity: 1; }
+
+    #resultado-wrap::-webkit-scrollbar, .cat-grid::-webkit-scrollbar { width: 4px; }
+    #resultado-wrap::-webkit-scrollbar-thumb, .cat-grid::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-icon">🔍</div>
+    <div>
+      <div class="brand-text">Auditor</div>
+      <div class="brand-sub">Verificación de aforo</div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════ PANTALLA: ESCANEO ═══════ -->
+<div class="screen active" id="screen-scan">
+  <div class="camera-section" id="cam-section">
+    <div id="reader"></div>
+    <div class="cam-overlay">
+      <div class="scan-frame">
+        <div class="c c-tl"></div><div class="c c-tr"></div><div class="c c-bl"></div><div class="c c-br"></div>
+        <div class="scan-beam"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar" id="status-bar">
+    <div class="status-dot" id="status-dot"></div>
+    <div class="status-content">
+      <div class="status-main" id="status-main">Iniciando cámara...</div>
+      <div class="status-hint" id="status-hint">Escaneá cualquier guía o QR para verificar</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-act" onclick="capturarFotoScan()"><span>📷</span><span>Foto del código</span></button>
+    <button class="btn-act" onclick="abrirManual()"><span>⌨️</span><span>Manual</span></button>
+  </div>
+
+  <div id="resultado-wrap" style="display:none;"></div>
+</div>
+
+<!-- ═══════ PANTALLA: ELEGIR CATEGORÍA (cuando no está aforado) ═══════ -->
+<div class="screen" id="screen-categoria">
+  <div class="cat-title">No está aforado — elegí categoría</div>
+  <div class="cat-sub" id="cat-sub-codigo"></div>
+  <div class="cat-grid" id="cat-grid"></div>
+</div>
+
+<!-- ═══════ PANTALLA: FOTOS (al aforar desde el auditor) ═══════ -->
+<div class="screen" id="screen-foto">
+  <div class="cat-title">Fotos del paquete</div>
+  <div class="cat-sub" id="foto-sub-codigo"></div>
+  <div class="foto-box" id="box-paquete" onclick="capturarFotoPaquete()">
+    <div class="foto-icon">📦</div><div class="foto-label">Foto del paquete completo</div>
+  </div>
+  <div class="foto-box" id="box-etiqueta" onclick="capturarFotoEtiqueta()">
+    <div class="foto-icon">🏷️</div><div class="foto-label">Foto de la etiqueta</div>
+  </div>
+  <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:8px;">
+    <button class="btn-primary" id="btn-guardar" disabled onclick="guardarRegistro()">Guardar registro</button>
+    <button class="btn-secondary" onclick="cancelarTodo()">Cancelar</button>
+  </div>
+</div>
+
+<input type="file" id="file-scan" accept="image/*" capture="environment" style="display:none" onchange="procesarFotoScan(event)">
+<input type="file" id="file-paquete" accept="image/*" capture="environment" style="display:none" onchange="procesarFotoPaquete(event)">
+<input type="file" id="file-etiqueta" accept="image/*" capture="environment" style="display:none" onchange="procesarFotoEtiqueta(event)">
+
+<div class="toast" id="toast"></div>
+<div class="screen-flash" id="flash"></div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   CONFIG
+   ═══════════════════════════════════════════════ */
+const API_BASE = "http://72.62.101.204:8002";
+const COLORES_CAT = { A: "var(--cat-a)", B: "var(--cat-b)", C: "var(--cat-c)", D: "var(--cat-d)", E: "var(--cat-e)" };
+
+/* ═══════════════════════════════════════════════
+   ESTADO
+   ═══════════════════════════════════════════════ */
+let categorias = [];
+let codigoEscaneado = null;
+let codigoInfo = null;
+let categoriaElegida = null;
+let fotoPaqueteBlob = null;
+let fotoEtiquetaBlob = null;
+let escaneando = false;
+let lastTxt = "";
+let lastTs = 0;
+let h5scanner = null;
+
+/* ═══════════════════════════════════════════════
+   VALIDACIONES (idénticas al Aforador / backend)
+   ═══════════════════════════════════════════════ */
+function esGuia(txt) { return /^45\d{7}$/.test(txt.trim()); }
+function parsearQR(txt) {
+  try {
+    let s = txt.trim().replace(/'/g, '"');
+    if (!s.startsWith('{')) s = '{' + s + '}';
+    const obj = JSON.parse(s);
+    const ok = obj.id && obj.sender_id && obj.hash_code && obj.security_digit !== undefined;
+    if (ok) return { valido: true, id: String(obj.id), obj };
+  } catch {}
+  return { valido: false };
+}
+function clasificarCodigo(txt) {
+  txt = txt.trim();
+  if (esGuia(txt)) return { tipo: "guia", guia: txt, qr_id: null, qr_json: null };
+  const qr = parsearQR(txt);
+  if (qr.valido) return { tipo: "qr", guia: null, qr_id: qr.id, qr_json: txt };
+  return null;
+}
+
+/* ═══════════════════════════════════════════════
+   FEEDBACK
+   ═══════════════════════════════════════════════ */
+let toastTimer;
+function toast(msg, tipo = "ok") {
+  const el = document.getElementById("toast");
+  clearTimeout(toastTimer);
+  el.className = "toast visible " + tipo;
+  el.textContent = (tipo === "ok" ? "✓  " : tipo === "err" ? "✗  " : "⚠  ") + msg;
+  toastTimer = setTimeout(() => el.classList.remove("visible"), 2800);
+}
+function flashScreen() { const f = document.getElementById("flash"); f.classList.add("active"); setTimeout(() => f.classList.remove("active"), 160); }
+function vibrar(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch {} }
+
+function setStatus(dot, main, hint) {
+  document.getElementById("status-dot").className = "status-dot " + (dot === "busy" ? "busy" : "");
+  document.getElementById("status-main").textContent = main;
+  document.getElementById("status-hint").textContent = hint || "";
+}
+
+/* ═══════════════════════════════════════════════
+   SCANNER
+   ═══════════════════════════════════════════════ */
+async function iniciarScanner() {
+  await detenerScanner();
+  h5scanner = new Html5Qrcode("reader");
+  const camW = document.getElementById("cam-section").clientWidth || 360;
+  const config = {
+    fps: 20,
+    qrbox: { width: Math.floor(camW * 0.9), height: 130 },
+    videoConstraints: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.DATA_MATRIX,
+    ],
+    rememberLastUsedCamera: false,
+    showTorchButtonIfSupported: false,
+  };
+  if (!document.getElementById("h5-hide")) {
+    const style = document.createElement("style");
+    style.id = "h5-hide";
+    style.textContent = `#reader__scan_region{display:block!important;}#reader__scan_region img{display:none!important;}#reader__dashboard{display:none!important;}#reader__header_message{display:none!important;}#reader video{width:100%!important;height:100%!important;object-fit:cover!important;}`;
+    document.head.appendChild(style);
+  }
+  try {
+    await h5scanner.start({ facingMode: "environment" }, config, onScan, () => {});
+  } catch {
+    try {
+      const cams = await Html5Qrcode.getCameras();
+      if (cams?.length) await h5scanner.start(cams[cams.length - 1].id, config, onScan, () => {});
+      else setStatus("err", "No se encontró cámara", "Usá el botón manual");
+    } catch {
+      setStatus("err", "Sin acceso a la cámara", "Verificá permisos del navegador");
+    }
+  }
+}
+
+async function detenerScanner() {
+  if (h5scanner) { try { await h5scanner.stop(); } catch {} h5scanner = null; }
+  const r = document.getElementById("reader");
+  if (r) r.innerHTML = "";
+}
+
+function onScan(txt) {
+  if (escaneando) return;
+  txt = txt.trim();
+  const ahora = Date.now();
+  if (txt === lastTxt && ahora - lastTs < 2500) return;
+  lastTxt = txt; lastTs = ahora;
+
+  const clasificado = clasificarCodigo(txt);
+  if (!clasificado) {
+    setStatus("err", "Código no reconocido", "Probá con otra guía o QR");
+    vibrar([100, 60, 100]);
+    setTimeout(() => setStatus("scan", "Escaneando…", "Escaneá cualquier guía o QR para verificar"), 2000);
+    return;
+  }
+
+  consultarCodigo(txt, clasificado);
+}
+
+/* ═══════════════════════════════════════════════
+   CONSULTAR SI YA ESTÁ AFORADO
+   ═══════════════════════════════════════════════ */
+async function consultarCodigo(textoCrudo, clasificado) {
+  escaneando = true;
+  codigoEscaneado = textoCrudo;
+  codigoInfo = clasificado;
+  const valorBusqueda = clasificado.guia || clasificado.qr_id;
+
+  setStatus("busy", "Consultando…", valorBusqueda);
+  vibrar(50);
+
+  try {
+    const res = await fetch(`${API_BASE}/aforo/buscar?codigo=${encodeURIComponent(valorBusqueda)}`);
+    const data = await res.json();
+    mostrarResultado(data, valorBusqueda);
+  } catch (e) {
+    toast("Error de conexión con el servidor", "err");
+    setStatus("err", "Sin conexión", "Reintentá en unos segundos");
+    escaneando = false;
+    setTimeout(() => setStatus("scan", "Escaneando…", "Escaneá cualquier guía o QR para verificar"), 2500);
+  }
+}
+
+function mostrarResultado(data, codigo) {
+  detenerScanner();
+  flashScreen();
+  const wrap = document.getElementById("resultado-wrap");
+  wrap.style.display = "flex";
+
+  if (data.aforado) {
+    const r = data.registro;
+    vibrar(80);
+    wrap.innerHTML = `
+      <div class="resultado-card si">
+        <div class="resultado-icono">✅</div>
+        <div class="resultado-titulo si">Ya está aforado</div>
+        <div class="resultado-sub">${codigo}</div>
+        <div class="datos-grid">
+          <div class="dato-box"><div class="dato-label">Categoría</div><div class="dato-valor">${r.categoria}</div></div>
+          <div class="dato-box"><div class="dato-label">Peso</div><div class="dato-valor">${r.peso} kg</div></div>
+          <div class="dato-box"><div class="dato-label">Fecha</div><div class="dato-valor">${formatFecha(r.creado_en)}</div></div>
+          <div class="dato-box"><div class="dato-label">Tipo</div><div class="dato-valor">${r.tipo_codigo === 'guia' ? 'Guía' : 'QR'}</div></div>
+        </div>
+        <div class="fotos-preview">
+          ${r.foto_paquete ? `<div class="foto-preview-box"><img src="${API_BASE}/fotos/${r.foto_paquete}"><div class="foto-preview-label">Paquete</div></div>` : ''}
+          ${r.foto_etiqueta ? `<div class="foto-preview-box"><img src="${API_BASE}/fotos/${r.foto_etiqueta}"><div class="foto-preview-label">Etiqueta</div></div>` : ''}
+        </div>
+      </div>
+      <button class="btn-secondary" onclick="reiniciarScan()">Escanear otro código</button>
+    `;
+  } else {
+    vibrar([100, 60, 100]);
+    wrap.innerHTML = `
+      <div class="resultado-card no">
+        <div class="resultado-icono">⚠️</div>
+        <div class="resultado-titulo no">No está aforado</div>
+        <div class="resultado-sub">${codigo}</div>
+      </div>
+      <button class="btn-primary" onclick="irAAforar()">Aforar ahora</button>
+      <button class="btn-secondary" onclick="reiniciarScan()">Escanear otro código</button>
+    `;
+  }
+  escaneando = false;
+}
+
+function formatFecha(iso) {
+  try {
+    const d = new Date(iso + "Z");
+    return d.toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch { return iso; }
+}
+
+function reiniciarScan() {
+  document.getElementById("resultado-wrap").style.display = "none";
+  document.getElementById("resultado-wrap").innerHTML = "";
+  mostrarPantalla("screen-scan");
+  setStatus("scan", "Escaneando…", "Escaneá cualquier guía o QR para verificar");
+  iniciarScanner();
+}
+
+/* ═══════════════════════════════════════════════
+   CAPTURA MANUAL / POR FOTO DEL CÓDIGO
+   ═══════════════════════════════════════════════ */
+function capturarFotoScan() { document.getElementById("file-scan").value = ""; document.getElementById("file-scan").click(); }
+
+async function procesarFotoScan(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  toast("Analizando imagen...", "warn");
+  const divTemp = document.createElement("div");
+  divTemp.id = "reader-tmp";
+  divTemp.style.display = "none";
+  document.body.appendChild(divTemp);
+  const tmp = new Html5Qrcode("reader-tmp");
+  try {
+    const txt = await tmp.scanFile(file, true);
+    onScan(txt);
+  } catch {
+    toast("No se detectó ningún código en la foto", "err");
+  } finally {
+    try { tmp.clear(); } catch {}
+    document.body.removeChild(divTemp);
+  }
+}
+
+function abrirManual() {
+  const valor = prompt("Ingresá la guía (9 dígitos, empieza con 45) o pegá el JSON del QR:");
+  if (!valor?.trim()) return;
+  const clasificado = clasificarCodigo(valor.trim());
+  if (!clasificado) { toast("Código inválido", "err"); return; }
+  consultarCodigo(valor.trim(), clasificado);
+}
+
+/* ═══════════════════════════════════════════════
+   NAVEGACIÓN
+   ═══════════════════════════════════════════════ */
+function mostrarPantalla(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+/* ═══════════════════════════════════════════════
+   FLUJO DE AFORAR DESDE EL AUDITOR (cuando no existe)
+   ═══════════════════════════════════════════════ */
+async function cargarCategorias() {
+  try {
+    const res = await fetch(`${API_BASE}/aforo/categorias`);
+    const data = await res.json();
+    categorias = data.categorias;
+  } catch {
+    categorias = [
+      { letra: "A", peso: 20 }, { letra: "B", peso: 35 }, { letra: "C", peso: 45 },
+      { letra: "D", peso: 8 }, { letra: "E", peso: 5 },
+    ];
+  }
+}
+
+function irAAforar() {
+  const grid = document.getElementById("cat-grid");
+  grid.innerHTML = "";
+  categorias.forEach((cat, i) => {
+    const btn = document.createElement("div");
+    btn.className = "cat-btn" + (categorias.length % 2 !== 0 && i === categorias.length - 1 ? " full" : "");
+    btn.style.setProperty("--cat-color", COLORES_CAT[cat.letra] || "var(--accent)");
+    btn.innerHTML = `<div class="cat-letra">${cat.letra}</div><div class="cat-peso">${cat.peso} kg</div>`;
+    btn.onclick = () => elegirCategoria(cat.letra);
+    grid.appendChild(btn);
+  });
+  const label = codigoInfo.tipo === "guia" ? codigoInfo.guia : codigoInfo.qr_id;
+  document.getElementById("cat-sub-codigo").textContent = label;
+  mostrarPantalla("screen-categoria");
+}
+
+function elegirCategoria(letra) {
+  categoriaElegida = letra;
+  fotoPaqueteBlob = null;
+  fotoEtiquetaBlob = null;
+  document.getElementById("box-paquete").classList.remove("lleno");
+  document.getElementById("box-paquete").innerHTML = `<div class="foto-icon">📦</div><div class="foto-label">Foto del paquete completo</div>`;
+  document.getElementById("box-etiqueta").classList.remove("lleno");
+  document.getElementById("box-etiqueta").innerHTML = `<div class="foto-icon">🏷️</div><div class="foto-label">Foto de la etiqueta</div>`;
+  document.getElementById("btn-guardar").disabled = true;
+  const label = codigoInfo.tipo === "guia" ? codigoInfo.guia : codigoInfo.qr_id;
+  document.getElementById("foto-sub-codigo").textContent = `[${letra}] ${label}`;
+  mostrarPantalla("screen-foto");
+}
+
+function capturarFotoPaquete() { document.getElementById("file-paquete").value = ""; document.getElementById("file-paquete").click(); }
+function capturarFotoEtiqueta() { document.getElementById("file-etiqueta").value = ""; document.getElementById("file-etiqueta").click(); }
+
+function procesarFotoPaquete(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  fotoPaqueteBlob = file;
+  const box = document.getElementById("box-paquete");
+  box.classList.add("lleno");
+  box.innerHTML = `<img src="${URL.createObjectURL(file)}"><div class="foto-check">✓</div>`;
+  verificarBotonGuardar();
+  vibrar(60);
+}
+
+function procesarFotoEtiqueta(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  fotoEtiquetaBlob = file;
+  const box = document.getElementById("box-etiqueta");
+  box.classList.add("lleno");
+  box.innerHTML = `<img src="${URL.createObjectURL(file)}"><div class="foto-check">✓</div>`;
+  verificarBotonGuardar();
+  vibrar(60);
+}
+
+function verificarBotonGuardar() {
+  document.getElementById("btn-guardar").disabled = !(fotoPaqueteBlob && fotoEtiquetaBlob);
+}
+
+async function guardarRegistro() {
+  if (!fotoPaqueteBlob || !fotoEtiquetaBlob || !codigoEscaneado || !categoriaElegida) return;
+  const btn = document.getElementById("btn-guardar");
+  btn.disabled = true;
+  btn.textContent = "Guardando...";
+
+  try {
+    const formData = new FormData();
+    formData.append("categoria", categoriaElegida);
+    formData.append("codigo", codigoEscaneado);
+    formData.append("foto_paquete", fotoPaqueteBlob, "paquete.jpg");
+    formData.append("foto_etiqueta", fotoEtiquetaBlob, "etiqueta.jpg");
+
+    const res = await fetch(`${API_BASE}/aforo/registro`, { method: "POST", body: formData });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Error desconocido" }));
+      throw new Error(err.detail || "Error al guardar");
+    }
+    toast("Aforado correctamente", "ok");
+    flashScreen();
+    vibrar([60, 40, 80]);
+    document.getElementById("resultado-wrap").style.display = "none";
+    document.getElementById("resultado-wrap").innerHTML = "";
+    mostrarPantalla("screen-scan");
+    setStatus("scan", "Escaneando…", "Escaneá cualquier guía o QR para verificar");
+    iniciarScanner();
+  } catch (err) {
+    toast("Error: " + err.message, "err");
+    btn.disabled = false;
+    btn.textContent = "Guardar registro";
+  }
+}
+
+function cancelarTodo() {
+  if (confirm("¿Cancelar y volver al escaneo?")) {
+    reiniciarScan();
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   INIT
+   ═══════════════════════════════════════════════ */
+(async () => {
+  await cargarCategorias();
+  setStatus("scan", "Escaneando…", "Escaneá cualquier guía o QR para verificar");
+  iniciarScanner();
+})();
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    });
+  }
+</script>
+
+</body>
+</html>

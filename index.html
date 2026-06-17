@@ -48,9 +48,21 @@
     #reader canvas, #reader img { display: none !important; }
     #reader > div { border: none !important; }
 
+    /* ── TOGGLE GUÍA / QR ── */
+    .modo-toggle { display: flex; gap: 8px; padding: 10px 14px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .modo-btn {
+      flex: 1; padding: 11px 8px; background: var(--bg3); border: 2px solid var(--border);
+      border-radius: 12px; font-family: var(--sans); font-size: 13px; font-weight: 700;
+      color: var(--text2); cursor: pointer; transition: all 0.15s;
+    }
+    .modo-btn.active { background: rgba(255,170,0,0.12); border-color: var(--accent); color: var(--accent); }
+    .modo-btn:active { transform: scale(0.96); }
+
     .cam-overlay { position: absolute; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; }
     .cam-overlay::before { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
-    .scan-frame { position: relative; z-index: 2; width: 90%; height: 130px; }
+    .scan-frame { position: relative; z-index: 2; transition: all 0.3s; }
+    .scan-frame.barcode { width: 88%; height: 78px; }
+    .scan-frame.qr-mode { width: 220px; height: 220px; }
     .scan-frame .c { position: absolute; width: 22px; height: 22px; }
     .scan-frame .c::before, .scan-frame .c::after { content: ''; position: absolute; background: var(--accent); }
     .scan-frame .c-tl { top: 0; left: 0; } .scan-frame .c-tl::before { top:0; left:0; width:100%; height:3px; border-radius:3px 0 0 0; } .scan-frame .c-tl::after { top:0; left:0; width:3px; height:100%; border-radius:3px 0 0 0; }
@@ -140,10 +152,15 @@
 
 <!-- ═══════ PANTALLA: ESCANEO ═══════ -->
 <div class="screen active" id="screen-scan">
+  <div class="modo-toggle" id="modo-toggle">
+    <button class="modo-btn active" id="modo-btn-guia" onclick="cambiarModoEscaneo('guia')">📊 Guía</button>
+    <button class="modo-btn" id="modo-btn-qr" onclick="cambiarModoEscaneo('qr')">▦ QR</button>
+  </div>
+
   <div class="camera-section" id="cam-section">
     <div id="reader"></div>
     <div class="cam-overlay">
-      <div class="scan-frame">
+      <div class="scan-frame barcode" id="scan-frame">
         <div class="c c-tl"></div><div class="c c-tr"></div><div class="c c-bl"></div><div class="c c-br"></div>
         <div class="scan-beam"></div>
       </div>
@@ -154,7 +171,7 @@
     <div class="status-dot" id="status-dot"></div>
     <div class="status-content">
       <div class="status-main" id="status-main">Iniciando cámara...</div>
-      <div class="status-hint" id="status-hint">Escaneá cualquier guía o QR para verificar</div>
+      <div class="status-hint" id="status-hint">Apuntá al código de barras (45XXXXXXX)</div>
     </div>
   </div>
 
@@ -216,6 +233,7 @@ let escaneando = false;
 let lastTxt = "";
 let lastTs = 0;
 let h5scanner = null;
+let modoEscaneo = "guia";     // "guia" | "qr" — elegido manualmente
 
 /* ═══════════════════════════════════════════════
    VALIDACIONES (idénticas al Aforador / backend)
@@ -259,6 +277,30 @@ function setStatus(dot, main, hint) {
   document.getElementById("status-hint").textContent = hint || "";
 }
 
+function actualizarUIModo() {
+  const btnGuia = document.getElementById("modo-btn-guia");
+  const btnQr = document.getElementById("modo-btn-qr");
+  const frame = document.getElementById("scan-frame");
+  if (modoEscaneo === "guia") {
+    btnGuia.classList.add("active");
+    btnQr.classList.remove("active");
+    frame.className = "scan-frame barcode";
+    setStatus("scan", "Buscando código de barras…", "Apuntá a la guía (45XXXXXXX)");
+  } else {
+    btnQr.classList.add("active");
+    btnGuia.classList.remove("active");
+    frame.className = "scan-frame qr-mode";
+    setStatus("scan", "Buscando código QR…", "Apuntá al QR cuadrado del paquete");
+  }
+}
+
+function cambiarModoEscaneo(modo) {
+  if (modo === modoEscaneo) return;
+  modoEscaneo = modo;
+  actualizarUIModo();
+  iniciarScanner();
+}
+
 /* ═══════════════════════════════════════════════
    SCANNER
    ═══════════════════════════════════════════════ */
@@ -266,16 +308,27 @@ async function iniciarScanner() {
   await detenerScanner();
   h5scanner = new Html5Qrcode("reader");
   const camW = document.getElementById("cam-section").clientWidth || 360;
+  const camH = document.getElementById("cam-section").clientHeight || 280;
+
+  let qrbox, formatsToSupport;
+  if (modoEscaneo === "guia") {
+    qrbox = { width: Math.floor(camW * 0.88), height: 80 };
+    formatsToSupport = [
+      Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.ITF,
+    ];
+  } else {
+    const side = Math.min(Math.floor(camH * 0.75), Math.floor(camW * 0.7), 240);
+    qrbox = { width: side, height: side };
+    formatsToSupport = [Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.DATA_MATRIX];
+  }
+
   const config = {
     fps: 20,
-    qrbox: { width: Math.floor(camW * 0.9), height: 130 },
+    qrbox,
     videoConstraints: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
-    formatsToSupport: [
-      Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.ITF,
-      Html5QrcodeSupportedFormats.DATA_MATRIX,
-    ],
+    formatsToSupport,
     rememberLastUsedCamera: false,
     showTorchButtonIfSupported: false,
   };
@@ -313,9 +366,16 @@ function onScan(txt) {
 
   const clasificado = clasificarCodigo(txt);
   if (!clasificado) {
-    setStatus("err", "Código no reconocido", "Probá con otra guía o QR");
+    setStatus("err", "Código no reconocido", modoEscaneo === "guia" ? "Buscá la guía 45XXXXXXX" : "Buscá un QR válido");
     vibrar([100, 60, 100]);
-    setTimeout(() => setStatus("scan", "Escaneando…", "Escaneá cualquier guía o QR para verificar"), 2000);
+    setTimeout(() => actualizarUIModo(), 2000);
+    return;
+  }
+
+  if (clasificado.tipo !== modoEscaneo) {
+    setStatus("warn", `Eso es un ${clasificado.tipo === "qr" ? "QR" : "código de barras"}`, `Tocá "${clasificado.tipo === "qr" ? "QR" : "Guía"}" arriba si querés usarlo`);
+    vibrar([150, 50, 150]);
+    setTimeout(() => actualizarUIModo(), 2500);
     return;
   }
 
@@ -342,7 +402,7 @@ async function consultarCodigo(textoCrudo, clasificado) {
     toast("Error de conexión con el servidor", "err");
     setStatus("err", "Sin conexión", "Reintentá en unos segundos");
     escaneando = false;
-    setTimeout(() => setStatus("scan", "Escaneando…", "Escaneá cualquier guía o QR para verificar"), 2500);
+    setTimeout(() => actualizarUIModo(), 2500);
   }
 }
 
@@ -399,7 +459,7 @@ function reiniciarScan() {
   document.getElementById("resultado-wrap").style.display = "none";
   document.getElementById("resultado-wrap").innerHTML = "";
   mostrarPantalla("screen-scan");
-  setStatus("scan", "Escaneando…", "Escaneá cualquier guía o QR para verificar");
+  actualizarUIModo();
   iniciarScanner();
 }
 
@@ -543,7 +603,7 @@ async function guardarRegistro() {
     document.getElementById("resultado-wrap").style.display = "none";
     document.getElementById("resultado-wrap").innerHTML = "";
     mostrarPantalla("screen-scan");
-    setStatus("scan", "Escaneando…", "Escaneá cualquier guía o QR para verificar");
+    actualizarUIModo();
     iniciarScanner();
   } catch (err) {
     toast("Error: " + err.message, "err");
@@ -563,7 +623,7 @@ function cancelarTodo() {
    ═══════════════════════════════════════════════ */
 (async () => {
   await cargarCategorias();
-  setStatus("scan", "Escaneando…", "Escaneá cualquier guía o QR para verificar");
+  actualizarUIModo();
   iniciarScanner();
 })();
 </script>

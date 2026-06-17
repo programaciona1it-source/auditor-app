@@ -413,23 +413,30 @@ function onScan(txt) {
 /* ═══════════════════════════════════════════════
    CONSULTAR SI YA ESTÁ AFORADO
    ═══════════════════════════════════════════════ */
-async function consultarCodigo(textoCrudo, clasificado) {
+async function consultarCodigo(textoCrudo, clasificado, esReintento = false) {
   escaneando = true;
   codigoEscaneado = textoCrudo;
   codigoInfo = clasificado;
   const valorBusqueda = clasificado.guia || clasificado.qr_id;
 
-  setStatus("busy", "Consultando…", valorBusqueda);
-  vibrar(50);
+  setStatus("busy", esReintento ? "Reintentando…" : "Consultando…", valorBusqueda);
+  if (!esReintento) vibrar(50);
 
   try {
     const res = await fetch(`${API_BASE}/aforo/buscar?codigo=${encodeURIComponent(valorBusqueda)}`);
     const data = await res.json();
     mostrarResultado(data, valorBusqueda);
   } catch (e) {
+    if (!esReintento) {
+      // Primer fallo: reintentar automáticamente una vez antes de mostrar error al operario.
+      // La mayoría de los hiccups de red (microcorte de WiFi, etc.) se resuelven solos en 1-2 segundos.
+      setTimeout(() => consultarCodigo(textoCrudo, clasificado, true), 1500);
+      return;
+    }
     toast("Error de conexión con el servidor", "err");
     setStatus("err", "Sin conexión", "Reintentá en unos segundos");
     escaneando = false;
+    lastTxt = ""; // permitir volver a escanear el mismo código sin esperar el debounce
     setTimeout(() => actualizarUIModo(), 2500);
   }
 }
@@ -607,11 +614,11 @@ function verificarBotonGuardar() {
   document.getElementById("btn-guardar").disabled = !(fotoPaqueteBlob && fotoEtiquetaBlob);
 }
 
-async function guardarRegistro() {
+async function guardarRegistro(esReintento = false) {
   if (!fotoPaqueteBlob || !fotoEtiquetaBlob || !codigoEscaneado || !categoriaElegida) return;
   const btn = document.getElementById("btn-guardar");
   btn.disabled = true;
-  btn.textContent = "Guardando...";
+  btn.textContent = esReintento ? "Reintentando..." : "Guardando...";
 
   try {
     const formData = new FormData();
@@ -635,6 +642,11 @@ async function guardarRegistro() {
     actualizarUIModo();
     iniciarScanner();
   } catch (err) {
+    // Si es un error de red (no de validación del servidor) y todavía no reintentamos, probar una vez más
+    if (!esReintento && (err.message === "Failed to fetch" || err instanceof TypeError)) {
+      setTimeout(() => guardarRegistro(true), 1500);
+      return;
+    }
     toast("Error: " + err.message, "err");
     btn.disabled = false;
     btn.textContent = "Guardar registro";
